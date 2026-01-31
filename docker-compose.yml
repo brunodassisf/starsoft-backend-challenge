@@ -13,26 +13,27 @@ services:
       - /usr/src/app/node_modules
     environment:
       - NODE_ENV=development
-      - CHOKIDAR_USEPOLLING=true
     networks:
       - nest-network
     depends_on:
-      - db
-      - redis-db
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     env_file:
       - .env
-
-  redis-db:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    networks:
-      - nest-network
 
   db:
     image: postgres:15-alpine
     container_name: cine-starsoft_db
     restart: always
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "${DB_USERNAME}", "-d", "${DB_NAME}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     ports:
       - '5432:5432'
     environment:
@@ -41,6 +42,35 @@ services:
       POSTGRES_DB: ${DB_NAME}
     networks:
       - nest-network
+
+  redis:
+    image: redis:alpine
+    container_name: cine-starsoft_redis
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "6379:6379"
+    restart: always
+    networks:
+      - nest-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: cine-starsoft_rabbitmq
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "check_running" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - nest-network
+    restart: always
 
 networks:
   nest-network:

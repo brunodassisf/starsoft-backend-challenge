@@ -1,12 +1,16 @@
 import { Module } from '@nestjs/common';
-import { CacheModule } from '@nestjs/cache-manager';
-import { redisStore } from 'cache-manager-redis-yet';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { SessaoModule } from './sessao/sessao.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Sessao, Assento } from './sessao/entities/sessao.entity';
+import { SeedModule } from './seed/seed.module';
+import { User } from './seed/entities/user.entity';
+import { ReservaModule } from './reserva/reserva.module';
+import { ClientsModule, Transport } from '@nestjs/microservices';
+import { CacheModule } from '@nestjs/cache-manager';
+import { redisStore } from 'cache-manager-redis-yet';
 
 @Module({
   imports: [
@@ -20,24 +24,35 @@ import { Sessao, Assento } from './sessao/entities/sessao.entity';
         username: configService.get<string>('DB_USERNAME'),
         password: configService.get<string>('DB_PASSWORD'),
         database: configService.get<string>('DB_NAME'),
-        entities: [Sessao, Assento],
+        entities: [Sessao, Assento, User],
         synchronize: true,
       }),
     }),
     CacheModule.registerAsync({
       isGlobal: true,
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => ({
+      useFactory: async () => ({
         store: await redisStore({
           socket: {
-            host: configService.get('REDIS_HOST'),
-            port: configService.get('REDIS_PORT'),
+            host: 'redis',
+            port: 6379,
           },
-          ttl: 60000,
         }),
       }),
-    }), SessaoModule,
+    }),
+    ClientsModule.register([
+      {
+        name: 'PEDIDO_SERVICE',
+        transport: Transport.RMQ,
+        options: {
+          urls: ['amqp://guest:guest@rabbitmq:5672'],
+          queue: 'pedidos_queue',
+          queueOptions: { durable: true },
+        },
+      },
+    ]),
+    SessaoModule,
+    SeedModule,
+    ReservaModule,
   ],
   controllers: [AppController],
   providers: [AppService],
