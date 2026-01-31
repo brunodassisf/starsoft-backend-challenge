@@ -8,5 +8,6 @@ import { Assento, Sessao } from './entities/sessao.entity';
   imports: [TypeOrmModule.forFeature([Sessao, Assento])],
   controllers: [SessaoController],
   providers: [SessaoService],
+  exports: [SessaoService],
 })
 export class SessaoModule { }

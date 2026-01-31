@@ -43,6 +43,7 @@ export class SessaoService {
       await this.sessoesRepository.save(novaSessao);
 
       return {
+        success: true,
         message: `Sessão ${novaSessao.filme} para o dia ${novaSessao.date} às ${novaSessao.horario}, criada com sucesso`
       };
 
@@ -52,6 +53,13 @@ export class SessaoService {
         'Não foi possível criar a sessão. Verifique os dados e tente novamente.'
       );
     }
+  }
+
+  async findById(sessaoId: string) {
+    return this.sessoesRepository.findOne({
+      where: { id: sessaoId },
+      relations: ['mapa_assentos']
+    });
   }
 
 }

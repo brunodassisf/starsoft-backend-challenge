@@ -1,4 +1,4 @@
-import { Controller, Post, Body, } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, } from '@nestjs/common';
 import { SessaoService } from './sessao.service';
 import { CreateSessaoDto } from './dto/create-sessao.dto';
 
@@ -9,6 +9,11 @@ export class SessaoController {
   @Post()
   create(@Body() createSessaoDto: CreateSessaoDto) {
     return this.sessaoService.create(createSessaoDto);
+  }
+
+  @Get(':id')
+  findAll(@Param('id') id: string) {
+    return this.sessaoService.findById(id);
   }
 
 }
