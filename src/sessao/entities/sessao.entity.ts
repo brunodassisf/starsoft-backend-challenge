@@ -38,7 +38,7 @@ export class Assento {
         type: 'varchar',
         default: 'disponivel'
     })
-    status: 'disponivel' | 'ocupado';
+    status: StatusAssento;
 
     @Column({ nullable: true })
     usuario_id: string;
@@ -46,4 +46,9 @@ export class Assento {
     @ManyToOne(() => Sessao, (sessao) => sessao.mapa_assentos, { onDelete: 'CASCADE' })
     @JoinColumn({ name: 'sessao_id' })
     sessao: Sessao;
+}
+
+export enum StatusAssento {
+    DISPONIVEL = 'disponivel',
+    OCUPADO = 'ocupado',
 }

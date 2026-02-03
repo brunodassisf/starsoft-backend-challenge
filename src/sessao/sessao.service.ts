@@ -1,9 +1,10 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { CreateSessaoDto } from './dto/create-sessao.dto';
-import { UpdateSessaoDto } from './dto/update-sessao.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Sessao, Assento } from './entities/sessao.entity';
+import { Sessao, Assento, StatusAssento } from './entities/sessao.entity';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 
 @Injectable()
 export class SessaoService {
@@ -12,9 +13,10 @@ export class SessaoService {
     private sessoesRepository: Repository<Sessao>,
     @InjectRepository(Assento)
     private assentoRepo: Repository<Assento>,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) { }
 
-  async create(createSessaoDto: CreateSessaoDto) {
+  async criarSessao(createSessaoDto: CreateSessaoDto) {
     const { totalAssentos, ...data } = createSessaoDto;
 
     try {
@@ -31,7 +33,7 @@ export class SessaoService {
 
         const assento = this.assentoRepo.create({
           posicao: `${letraFila}${numeroAssento}`,
-          status: 'disponivel',
+          status: StatusAssento.DISPONIVEL,
           usuario_id: novaSessao.id
         });
 
@@ -55,11 +57,96 @@ export class SessaoService {
     }
   }
 
-  async findById(sessaoId: string) {
-    return this.sessoesRepository.findOne({
-      where: { id: sessaoId },
-      relations: ['mapa_assentos']
+  async listarTodasSessoes() {
+    const sessoes = await this.sessoesRepository.find({
+      relations: ['mapa_assentos'],
+      order: {
+        mapa_assentos: {
+          posicao: 'ASC'
+        }
+      }
     });
+
+    const listSessoes = []
+
+    for (const sessao of sessoes) {
+      const mapaPromessas = sessao.mapa_assentos.map(async (assento) => {
+        const cacheKey = `seat_lock:${assento.id}`;
+        const reservaAtiva: string = await this.cacheManager.get(cacheKey) || '';
+
+        if (reservaAtiva) {
+          return {
+            ...assento,
+            status: StatusAssento.OCUPADO,
+            usuario_id: reservaAtiva,
+          };
+        }
+
+        return assento;
+      });
+
+      sessao.mapa_assentos = await Promise.all(mapaPromessas);
+
+      listSessoes.push(sessao);
+    }
+
+    return listSessoes
+  }
+
+  async sessaoPorId(sessaoId: string) {
+    const sessao = await this.sessoesRepository.findOne({
+      where: { id: sessaoId },
+      relations: ['mapa_assentos'],
+      order: {
+        mapa_assentos: {
+          posicao: 'ASC'
+        }
+      }
+    });
+
+    if (!sessao) return null;
+
+    const mapaPromessas = sessao.mapa_assentos.map(async (assento) => {
+      const cacheKey = `seat_lock:${assento.id}`;
+      const reservaAtiva: string = await this.cacheManager.get(cacheKey) || '';
+
+      if (reservaAtiva) {
+        return {
+          ...assento,
+          status: StatusAssento.OCUPADO,
+          usuario_id: reservaAtiva,
+        };
+      }
+
+      return assento;
+    });
+
+    sessao.mapa_assentos = await Promise.all(mapaPromessas);
+
+    return sessao;
+  }
+
+  async validaAssento(assentoId: string) {
+    const assentoExiste = await this.sessoesRepository.findOne({
+      where: { mapa_assentos: { id: assentoId } },
+    });
+
+    if (!assentoExiste) {
+      throw new BadRequestException('Assento não existe.');
+    }
+  }
+
+  async atualizandoStatusAssento(assento_id: string, usuario_id: string, status: StatusAssento) {
+    const assento = await this.assentoRepo.findOneBy({ id: assento_id });
+
+    if (!assento) {
+      throw new NotFoundException('Assento não encontrado');
+    }
+
+    assento.usuario_id = usuario_id;
+    assento.status = status;
+
+    return await this.assentoRepo.save(assento);
   }
 
 }
