@@ -11,6 +11,8 @@ import { ReservaModule } from './reserva/reserva.module';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { CacheModule } from '@nestjs/cache-manager';
 import { redisStore } from 'cache-manager-redis-yet';
+import { Pagamento } from './reserva/entities/pagamento.entity';
+
 
 @Module({
   imports: [
@@ -24,7 +26,7 @@ import { redisStore } from 'cache-manager-redis-yet';
         username: configService.get<string>('DB_USERNAME'),
         password: configService.get<string>('DB_PASSWORD'),
         database: configService.get<string>('DB_NAME'),
-        entities: [Sessao, Assento, User],
+        entities: [Sessao, Assento, User, Pagamento],
         synchronize: true,
       }),
     }),
