@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 
 async function bootstrap() {
@@ -12,6 +13,12 @@ async function bootstrap() {
     transform: true,
   }));
 
+  const config = new DocumentBuilder()
+    .setTitle('Cine Starsoft')
+    .setDescription('API para gerenciamento de sessões e reservas de assentos em eventos de cinema.')
+    .setVersion('1.0')
+    .build();
+
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
@@ -22,6 +29,8 @@ async function bootstrap() {
   });
 
   await app.startAllMicroservices();
+  const documentFactory = () => SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, documentFactory);
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
