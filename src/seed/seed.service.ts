@@ -1,9 +1,10 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { Sessao } from 'src/sessao/entities/sessao.entity';
 import { SessaoService } from 'src/sessao/sessao.service';
+import { Pagamento } from 'src/reserva/entities/pagamento.entity';
 
 
 @Injectable()
@@ -13,6 +14,7 @@ export class SeedService implements OnModuleInit {
     constructor(
         @InjectRepository(User) private userRepository: Repository<User>,
         @InjectRepository(Sessao) private sessaoRepository: Repository<Sessao>,
+        @InjectRepository(Pagamento) private pagamentoRepository: Repository<Pagamento>,
         private sessaoService: SessaoService,
     ) { }
 
@@ -54,13 +56,28 @@ export class SeedService implements OnModuleInit {
             "date": "2026-01-24",
             "horario": "15:30:00",
             "sala": "A",
-            "preco": 30.00,
+            "preco": 25.00,
             "totalAssentos": 16
         }
-        await this.sessaoService.create(sessao);
+        await this.sessaoService.criarSessao(sessao);
     }
 
     async listAllUsers() {
         return this.userRepository.find()
+    }
+
+    async historicoComprasUsuario(user_id: string) {
+        const user = await this.pagamentoRepository.find({ where: { usuario_id: user_id } });
+        if (!user || user.length === 0) {
+            throw new BadRequestException('Usuário não encontrado ou sem histórico de compras.');
+        }
+        return user;
+    }
+
+    async validarUsuario(userId: string) {
+        const user = await this.userRepository.findOne({ where: { id: userId } });
+        if (!user) {
+            throw new BadRequestException('Usuário não encontrado.');
+        }
     }
 }
