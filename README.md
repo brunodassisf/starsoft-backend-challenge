@@ -16,8 +16,22 @@ Enquanto o PostgreSQL é a nossa 'fonte da verdade' para dados persistentes, o R
 
 ## Execução
 
-Após fazer o clone do projeto e preciso rodar o comando: <br>
-`docker compose up --build`<br>
+Após fazer o clone do projeto crie um arquivo **.env** com as seguintes informações: <br>
+```
+DB_HOST=db
+DB_PORT=5432
+DB_USERNAME=cine_user
+DB_PASSWORD=cine_09
+DB_NAME=cine_challenge_db
+
+REDIS_HOST=redis
+REDIS_PORT=6379
+
+PORT=3000
+NODE_ENV=development
+```
+Para rodar o projeto use o comando:<br>
+`docker compose up`<br>
 Quando a API e iniciada, as tabelas de usuario e sessão seram populados automaticamente.
 
 ## Estratégias Implementadas
