@@ -1,205 +1,66 @@
 # Teste para Desenvolvedor(a) Back-End Node.js/NestJS - Sistemas Distribuídos
 
-## Introdução
+## Visão Geral
 
-Bem-vindo(a) ao processo seletivo para a posição de **Desenvolvedor(a) Back-End** em nossa equipe! Este teste tem como objetivo avaliar suas habilidades técnicas em sistemas distribuídos, alta concorrência, e arquiteturas escaláveis utilizando Node.js e NestJS.
+O Cine-Starsoft é uma plataforma robusta de back-end desenvolvida para orquestrar o ciclo de vida completo de ingressos de cinema. O sistema foi projetado para ser uma solução de alta performance, capaz de gerenciar desde o catálogo de filmes e salas até o fluxo crítico de vendas e reserva de assentos em tempo real.
 
-## Instruções
+O foco central da arquitetura é a resiliência e a escalabilidade, garantindo que a experiência do usuário seja fluida mesmo durante picos de demanda, como grandes lançamentos de blockbusters.
 
-- Faça um **fork** deste repositório para o seu GitHub pessoal.
-- Desenvolva as soluções solicitadas abaixo, seguindo as **melhores práticas de desenvolvimento**.
-- Após a conclusão, envie o link do seu repositório para avaliação.
-- Sinta-se à vontade para adicionar qualquer documentação ou comentários que julgar necessário.
+## Tecnologias
 
-## Desafio
+- Banco de Dados: PostgreSQL
+- Mensageria: RabbitMQ
+- Cache: Redis
 
-### Contexto
+Enquanto o PostgreSQL é a nossa 'fonte da verdade' para dados persistentes, o RabbitMQ orquestra o fluxo de trabalho entre componentes de forma resiliente, e o Redis garante que as informações mais críticas cheguem ao usuário com velocidade sub-milissegundo.
 
-Você foi designado para desenvolver o sistema de venda de ingressos para uma **rede de cinemas**. O sistema precisa lidar com **concorrência**: múltiplos usuários tentando comprar os mesmos assentos simultaneamente.
+## Execução
 
-### O Problema Real
+Após fazer o clone do projeto e preciso rodar o comando: <br>
+`docker compose up --build`<br>
+Quando a API e iniciada, as tabelas de usuario e sessão seram populados automaticamente.
 
-Imagine a seguinte situação:
+## Estratégias Implementadas
 
-- Uma sala de cinema com **2 assentos disponíveis**
-- **10 usuários** tentando comprar no mesmo momento
-- **Múltiplas instâncias** da aplicação rodando simultaneamente
-- Necessidade de garantir que **nenhum assento seja vendido duas vezes**
-- **Reservas temporárias** enquanto o pagamento é processado (30 segundos)
-- **Cancelamento automático** se o pagamento não for confirmado
+O race condition foi resolvido aplicado o uso do Redis ao NestJS, com ele conseguimos determinar quem é o **'primeiro'** usuário que clica no assento, fazendo assim o segundo usuário receber um aviso que o assento ja esta ocupado.
 
-### Requisitos Obrigatórios
+Importante lembrar que o assento não tem seu status alterado no banco de dados para **'ocupado'**, o endpoint que lista a sessão do cinema onde traz a lista de assentos, compara se o **'assento_id'** que está no Redis esta na validade de 30 segundos. Caso esteja, ele mostra aquele assento como ocupado.
 
-#### 1. **Configuração do Ambiente**
+Após 30 segundos sem a **'confirmação da intenção de compra'**, o Redis com aquele **assento_id** perde a validade e fica **disponível** novamente para o usuário. Caso o usuário clique para **'confirmar a inteção de compra'**, aquele Redis com o assento_id renova sua validade por 10 minutos. Para que o usuário conclua sua compra nesse prazo, onde o seu assento ja esta garantido ao final da compra.
 
-Configure um ambiente de desenvolvimento utilizando **Docker** e **Docker Compose**, incluindo:
+## Endpoints da API
 
-- Aplicação Node.js com **NestJS**
-- **Banco de dados relacional** (PostgreSQL, MySQL, etc.)
-- **Sistema de mensageria** (Kafka, RabbitMQ, etc.)
-- **Banco de dados distribuído** para cache (Redis, Memcached, etc.)
-- A aplicação deve ser iniciada com um único comando (`docker-compose up`)
+1. Escolher o id de um usuário, para isso acesse o endpoint:<br> `/seed/users`<br>![alt text](/exemplos/image.png)
 
-#### 2. **API RESTful - Gestão de Ingressos**
 
-Implemente uma API RESTful com as seguintes operações:
+2. Listamos a sessão dos filmes e selecionamos o id de um assento dentro dessa sessão:<br> `/sessao/todas`<br>![alt text](/exemplos/image-1.png)
 
-**2.1. Gestão de Sessões**
 
-- Criar sessões de cinema (filme, horário, sala)
-- Definir assentos disponíveis por sessão (Mínimo 16 assentos)
-- Definir preço do ingresso
+3. Com o id do assento e o id do usuário em mãos, executamos o endpoint:<br> `/reserva/assento`<br>![alt text](/exemplos/image-2.png)
 
-**2.2. Reserva de Assentos**
+4. Recebemos um retorno mostrando que nosso assento esta reservado por 30 segundos.<br>![alt text](/exemplos/image-3.png)
 
-- Endpoint para reservar assento(s)
-- Reserva tem validade de 30 segundos
-- Retornar ID da reserva e timestamp de expiração
+5. Ao verificamos a sessão com a lista de assentos, vemos que o assento selecionado está como ocupado. Isso e claro sem essa informação esteja salva no banco de dados graças ao Redis.<br>![alt text](/exemplos/image-4.png)
 
-**2.3. Confirmação de Pagamento**
+6. Durante os 30 segundos que o assento esta reservado, se o usuário clicar em confirmar aquele assento, será chamado esse endpoint: <br> `/reserva/confirma-intencao`<br>![alt text](/exemplos/image-5.png)
 
-- Endpoint para confirmar pagamento de uma reserva, e assim converter reserva em venda definitiva
-- Publicar evento de venda confirmada
+7. Onde receberá esse retorno, no qual, o nosso Redis terá um valor de expiração renovado para 10 minutos. Dando tempo para o usuário finalizar sua compra utilizando os meios de pagamento.<br>![alt text](/exemplos/image-6.png)
 
-**2.4. Consultas**
+8. Por fim, ao chamar o endpoint:<br>`/reserva/pagamento`<br> Conseguimos concluir o ciclo de compra do assento, que consiste em reserva do assento por 30 segundos garantindo que dois usuário que clicarem no mesmo instante para reserva o assento, apenas o primeira consiga a reserva. Após essa primeira reserva o usuário podera avança para o pagamento, isso consiste em, **confirmar a intenção de compra** do assento. Onde nos colcoamos um tempo de expiração maior no registro do Redis. Por fim, ao realizar o pagamento nos processamos o pagamento, atualizamos o banco de dados com a nova informação no assento comprado e removemos o registro do Redis.<br>![alt text](/exemplos/image-7.png)<br>![alt text](/exemplos/image-8.png)
 
-- Buscar disponibilidade de assentos por sessão (tempo real)
-- Histórico de compras por usuário
 
-#### 3. **Processamento Assíncrono com Mensageria**
+## Limitações Conhecidas
 
-- Usar **sistema de mensageria** para comunicação assíncrona entre componentes
-- Publicar eventos quando: reserva criada, pagamento confirmado, reserva expirada, assento liberado
-- Consumir e processar esses eventos de forma confiável
+Não houve limitações das tecnologias envolvidas. Apenas a limitação do tempo para desenvolvimento e entrega.
 
-#### 4. **Logging**
+## Melhorias Futuras
 
-- Implementar logging estruturado (níveis: DEBUG, INFO, WARN, ERROR)
+Para os proximos passo eu listaria os seguinte pontos de melhoria:
 
-#### 5. **Clean Code e Boas Práticas**
+- Implementar testes unitários e de integração para as funcionalidades desenvolvidas.
 
-- Aplicar princípios SOLID
-- Separação clara de responsabilidades (Controllers, Services, Repositories/Use Cases)
-- Tratamento adequado de erros
-- Configurar ESLint e Prettier
-- Commits organizados e descritivos
+- Desacoplar a lógica de pagamento do Controller de Reservas, permitindo a escalabilidade e a inclusão de novos métodos de pagamento (Strategy Pattern).
 
-### Requisitos Técnicos Específicos
+- Refatorar o objeto de Usuário para incluir campos adicionais (e-mail, data de nascimento, etc.), viabilizando a integração com microsserviços de mensageria para envio de recibos, notificações de lançamentos e campanhas de marketing personalizadas.
 
-#### Estrutura de Banco de Dados Sugerida
-
-Você deve projetar um schema que suporte:
-
-- **Sessões**: informações da sessão (filme, horário, sala)
-- **Assentos**: assentos disponíveis por sessão
-- **Reservas**: reservas temporárias com expiração
-- **Vendas**: vendas confirmadas
-
-#### Fluxo de Reserva Esperado
-
-```
-1. Cliente solicita uma reserva
-2. Sistema verifica disponibilidade com proteção contra concorrência
-3. Cria reserva temporária (válida por 30 segundos)
-4. Publica evento no sistema de mensageria
-5. Retorna ID da reserva
-
-6. Cliente confirma o pagamento
-7. Sistema valida reserva (ainda não expirou?)
-8. Converte reserva em venda definitiva
-9. Publica evento de confirmação no sistema de mensageria
-```
-
-#### Edge Cases a Considerar
-
-1. **Race Condition**: 2 usuários clicam no último assento disponível no mesmo milissegundo
-2. **Deadlock**: Usuário A reserva assentos 1 e 3, Usuário B reserva assentos 3 e 1, ambos tentam reservar o assento do outro
-3. **Idempotência**: Cliente reenvia mesma requisição por timeout
-4. **Expiração**: Reservas não confirmadas devem liberar o assento automaticamente após 30 segundos
-
-### Diferenciais (Opcional - Pontos Extra)
-
-Os itens abaixo são opcionais e darão pontos extras na avaliação:
-
-- **Documentação da API**: Swagger/OpenAPI acessível em `/api-docs`
-- **Testes de Unidade**: Cobertura de 60-70%, mockar dependências externas
-- **Dead Letter Queue (DLQ)**: Mensagens que falharam vão para fila separada
-- **Retry Inteligente**: Sistema de retry com backoff exponencial
-- **Processamento em Batch**: Processar mensagens em lotes
-- **Testes de Integração/Concorrência**: Simular múltiplos usuários simultaneamente
-- **Rate Limiting**: Limitar requisições por IP/usuário
-
-### Critérios de Avaliação
-
-Os seguintes aspectos serão considerados (em ordem de importância):
-
-1. **Funcionalidade Correta**: O sistema garante que nenhum assento é vendido duas vezes?
-2. **Controle de Concorrência**: Coordenação distribuída implementada corretamente?
-3. **Qualidade de Código**: Clean code, SOLID, padrões de projeto?
-4. **Documentação**: README claro e código bem estruturado?
-
-### Entrega
-
-#### Repositório Git
-
-- Código disponível em repositório público (GitHub/GitLab)
-- Histórico de commits bem organizado e descritivo
-- Branch `main` deve ser a versão final
-
-#### README.md Obrigatório
-
-Deve conter:
-
-1. **Visão Geral**: Breve descrição da solução
-2. **Tecnologias Escolhidas**: Qual banco de dados, sistema de mensageria e cache você escolheu e por quê?
-3. **Como Executar**:
-   - Pré-requisitos
-   - Comandos para subir o ambiente
-   - Como popular dados iniciais
-   - Como executar testes (se houver)
-4. **Estratégias Implementadas**:
-   - Como você resolveu race conditions?
-   - Como garantiu coordenação entre múltiplas instâncias?
-   - Como preveniu deadlocks?
-5. **Endpoints da API**: Lista com exemplos de uso
-6. **Decisões Técnicas**: Justifique escolhas importantes de design
-7. **Limitações Conhecidas**: O que ficou faltando? Por quê?
-8. **Melhorias Futuras**: O que você faria com mais tempo?
-
-### Exemplo de Fluxo para Testar
-
-Para facilitar a avaliação, inclua instruções ou script mostrando:
-
-```
-1. Criar sessão "Filme X - 19:00"
-2. Criar sala com no mínimo 16 assentos, a R$ 25,00 cada
-3. Simular
- 3.1. 2 usuários tentando reservar o mesmo assento simultaneamente
-4. Verificar quantidade de reservas geradas
-5. Comprovar o funcionamento do fluxo de pagamento do assento
-```
-
-### Prazo
-
-- **Prazo sugerido**: 5 dias corridos a partir do recebimento do desafio
-
-### Dúvidas e Suporte
-
-- Abra uma **Issue** neste repositório caso tenha dúvidas sobre requisitos
-- Não fornecemos suporte para problemas de configuração de ambiente
-- Assuma premissas razoáveis quando informações estiverem ambíguas e documente-as
-
----
-
-## Observações Finais
-
-Este é um desafio que reflete problemas reais enfrentados em produção. **Não esperamos que você implemente 100% dos requisitos**, especialmente os diferenciais. Priorize:
-
-1. ✅ Garantir que nenhum assento seja vendido duas vezes
-2. ✅ Sistema de mensageria confiável
-3. ✅ Código limpo e bem estruturado
-4. ✅ Documentação clara
-
-**Qualidade > Quantidade**. É melhor implementar poucas funcionalidades muito bem feitas do que muitas de forma superficial.
-
-**Boa sorte! Estamos ansiosos para conhecer sua solução e discutir suas decisões técnicas na entrevista.**
+- Implementar o sistema de reembolso, garantindo a reversão de transações e a atualização do status da reserva.
